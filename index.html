@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Orbit: Fixed</title>
+    <title>Neon Orbit: Production</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
 
@@ -363,7 +363,7 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // --- DATA & LEADERBOARD ---
+        // --- DATA & LEADERBOARD FIX ---
         const SKINS = [
             { id: 'neon', name: 'Neon Core', color: '#0ff', price: 0 },
             { id: 'gold', name: 'Midas Touch', color: '#ffd700', price: 100 },
@@ -372,18 +372,23 @@
             { id: 'void', name: 'Dark Matter', color: '#90f', price: 1000 }
         ];
 
-        let savedData = JSON.parse(localStorage.getItem('neonOrbitData')) || { 
-            highScore: 0, 
-            chips: 0, 
-            unlockedSkins: ['neon'], 
-            equippedSkin: 'neon',
-            leaderboard: [] 
-        };
+        // SAFE DATA LOADING
+        let savedData = JSON.parse(localStorage.getItem('neonOrbitData')) || {};
+        
+        // Ensure structure exists (Migration fix)
+        if (typeof savedData.highScore === 'undefined') savedData.highScore = 0;
+        if (typeof savedData.chips === 'undefined') savedData.chips = 0;
+        if (!Array.isArray(savedData.unlockedSkins)) savedData.unlockedSkins = ['neon'];
+        if (!savedData.equippedSkin) savedData.equippedSkin = 'neon';
+        if (!Array.isArray(savedData.leaderboard)) savedData.leaderboard = [];
 
         function saveData() { localStorage.setItem('neonOrbitData', JSON.stringify(savedData)); updateCurrencyUI(); }
 
         function saveToLeaderboard(name) {
             if(!name) name = "UNKNOWN";
+            // Extra safety check
+            if (!savedData.leaderboard) savedData.leaderboard = [];
+            
             savedData.leaderboard.push({ name: name, score: score, level: level });
             // Sort by score desc
             savedData.leaderboard.sort((a, b) => b.score - a.score);
@@ -394,22 +399,26 @@
         }
 
         function showLeaderboard() {
-            document.getElementById('gameOverScreen').classList.add('hidden');
-            document.getElementById('leaderboardScreen').classList.remove('hidden');
+            const lbScreen = document.getElementById('leaderboardScreen');
+            const gameOverScreen = document.getElementById('gameOverScreen');
+            
+            if(gameOverScreen) gameOverScreen.classList.add('hidden');
+            if(lbScreen) lbScreen.classList.remove('hidden');
             
             const list = document.getElementById('leaderboardList');
-            list.innerHTML = '';
-            
-            savedData.leaderboard.forEach((entry, index) => {
-                const row = document.createElement('div');
-                row.className = 'lb-row';
-                row.innerHTML = `
-                    <span class="lb-rank">${index + 1}</span>
-                    <span class="lb-name">${entry.name}</span>
-                    <span class="lb-score">${entry.score} <span style="color:#666; font-size:0.7em;">(L${entry.level})</span></span>
-                `;
-                list.appendChild(row);
-            });
+            if(list) {
+                list.innerHTML = '';
+                (savedData.leaderboard || []).forEach((entry, index) => {
+                    const row = document.createElement('div');
+                    row.className = 'lb-row';
+                    row.innerHTML = `
+                        <span class="lb-rank">${index + 1}</span>
+                        <span class="lb-name">${entry.name}</span>
+                        <span class="lb-score">${entry.score} <span style="color:#666; font-size:0.7em;">(L${entry.level})</span></span>
+                    `;
+                    list.appendChild(row);
+                });
+            }
         }
 
         const THEMES = [
@@ -526,14 +535,13 @@
             document.getElementById('earnedChips').innerText = score;
             
             // Prepare Input Field
-            document.getElementById('playerName').value = '';
+            const input = document.getElementById('playerName');
+            if(input) input.value = '';
+            
             document.getElementById('gameOverScreen').classList.remove('hidden');
             
             // Focus input on desktop
-            setTimeout(() => {
-               const input = document.getElementById('playerName');
-               input.focus();
-            }, 100);
+            setTimeout(() => { if(input) input.focus(); }, 100);
             
             isGameOverProcessing = false;
         }
@@ -764,9 +772,6 @@
             };
 
             bind('startBtn', startGame);
-            // We map restartBtn to startGame because game over screen flows into leaderboard eventually
-            // but user might want to just retry immediately? Wait, restartBtn is on Game Over screen.
-            // Yes, user enters name then submits. Or just retries.
             bind('restartBtn', startGame); 
             bind('restartBtnLB', startGame);
             
