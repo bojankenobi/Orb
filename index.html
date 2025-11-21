@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Orbit: Full Audio</title>
+    <title>Neon Orbit: Fixed</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
 
@@ -28,7 +28,6 @@
 
         .top-hud { display: flex; justify-content: center; width: 100%; position: relative; }
 
-        /* Music Toggle */
         #music-btn {
             position: absolute; left: 0; top: 0;
             pointer-events: auto;
@@ -40,7 +39,6 @@
         #music-btn:hover { background: #fff; color: #000; box-shadow: 0 0 15px #fff; }
         .music-off { opacity: 0.5; text-decoration: line-through; }
 
-        /* Shop Button */
         #shop-btn {
             position: absolute; right: 0; top: 0;
             pointer-events: auto;
@@ -72,7 +70,7 @@
         .card {
             background: rgba(10, 10, 10, 0.95); padding: 30px; border-radius: 20px;
             border: 2px solid #fff; box-shadow: 0 0 30px rgba(255, 255, 255, 0.15);
-            text-align: center; max-width: 85%; width: 340px; pointer-events: auto;
+            text-align: center; max-width: 90%; width: 360px; pointer-events: auto;
             position: relative;
         }
 
@@ -81,11 +79,33 @@
         
         .btn {
             background: transparent; color: #fff; border: 2px solid #fff;
-            padding: 15px 40px; font-size: 1.2rem; font-family: 'Orbitron', sans-serif; font-weight: 900;
+            padding: 12px 30px; font-size: 1.1rem; font-family: 'Orbitron', sans-serif; font-weight: 900;
             cursor: pointer; text-transform: uppercase; border-radius: 50px;
-            transition: all 0.1s; margin-top: 15px; outline: none;
+            transition: all 0.1s; margin-top: 10px; outline: none; width: 80%;
         }
         .btn:active { background: #fff; color: #000; transform: scale(0.95); }
+
+        /* Inputs */
+        input[type="text"] {
+            background: rgba(255,255,255,0.1); border: 1px solid #fff; color: #fff;
+            padding: 10px; font-family: 'Orbitron'; font-size: 1.2rem; text-align: center;
+            width: 70%; margin-bottom: 15px; border-radius: 5px; outline: none; text-transform: uppercase;
+        }
+        input[type="text"]::placeholder { color: #666; }
+
+        /* Leaderboard */
+        .leaderboard-container {
+            margin-top: 15px; max-height: 200px; overflow-y: auto; width: 100%;
+            border-top: 1px solid #444; padding-top: 10px;
+        }
+        .lb-row {
+            display: flex; justify-content: space-between; padding: 5px 0;
+            font-size: 0.85rem; border-bottom: 1px solid #222;
+        }
+        .lb-rank { width: 10%; color: #888; text-align: left; }
+        .lb-name { width: 50%; color: #fff; text-align: left; font-weight: bold; }
+        .lb-score { width: 40%; color: #0ff; text-align: right; }
+        .lb-header { color: #aaa; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 5px; }
 
         #shopScreen { z-index: 60; }
         .shop-grid {
@@ -147,7 +167,7 @@
     <div id="startScreen" class="screen-overlay">
         <div class="card">
             <h1>Neon Orbit</h1>
-            <p style="color:#0ff; font-weight:bold;">MUSIC ENABLED</p>
+            <p style="color:#0ff; font-weight:bold;">SYSTEM ONLINE</p>
             <div style="text-align:left; font-size:0.8rem; background:rgba(255,255,255,0.1); padding:10px; border-radius:10px; margin:10px 0;">
                 <span style="color:#ff3333">■</span> Avoid Red<br>
                 <span style="color:#39ff14">●</span> Collect Green (+5)<br>
@@ -159,14 +179,38 @@
         </div>
     </div>
 
-    <!-- GAME OVER SCREEN -->
+    <!-- GAME OVER SCREEN (Input Name) -->
     <div id="gameOverScreen" class="screen-overlay hidden">
         <div class="card">
             <h1 class="red-text">WRECKED</h1>
             <p>Score: <span id="finalScore" style="color:#fff; font-size:2rem; font-weight:bold;">0</span></p>
             <p class="gold-text">+<span id="earnedChips">0</span> Chips earned</p>
-            <button class="btn" id="restartBtn">RETRY</button>
-            <button class="btn" id="goShopBtn" style="font-size:0.9rem; border-color:#ffd700; color:#ffd700; margin-top:10px;">OPEN SHOP</button>
+            
+            <div style="margin-top:20px;">
+                <p style="font-size:0.8rem; margin-bottom:5px;">ENTER PILOT NAME:</p>
+                <input type="text" id="playerName" placeholder="PILOT_ID" maxlength="10" autocomplete="off">
+            </div>
+            
+            <button class="btn" id="submitScoreBtn" style="border-color:#39ff14; color:#39ff14;">SUBMIT SCORE</button>
+        </div>
+    </div>
+
+    <!-- LEADERBOARD SCREEN -->
+    <div id="leaderboardScreen" class="screen-overlay hidden">
+        <div class="card">
+            <h1 style="color:#ffd700;">TOP 10 PILOTS</h1>
+            <div class="lb-row lb-header">
+                <span class="lb-rank">#</span>
+                <span class="lb-name">NAME</span>
+                <span class="lb-score">SCORE (LVL)</span>
+            </div>
+            <div class="leaderboard-container" id="leaderboardList">
+                <!-- Scores injected here -->
+            </div>
+            <div style="display:flex; gap:10px; margin-top:15px;">
+                <button class="btn" id="restartBtnLB">RETRY</button>
+                <button class="btn" id="goShopBtnLB" style="border-color:#ffd700; color:#ffd700;">SHOP</button>
+            </div>
         </div>
     </div>
 
@@ -194,164 +238,132 @@
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
-            // Start music loop if not started
-            if (isMusicOn && !musicInterval) {
-                startMusicLoop();
-            }
+            if (isMusicOn && !musicInterval) startMusicLoop();
         };
 
-        // GENERATIVE BGM LOOP
         const startMusicLoop = () => {
             if (musicInterval) clearInterval(musicInterval);
-            
-            // BPM = 120 (500ms per beat)
-            // Using setInterval for simplicity in single file, scheduling logic is simpler
             musicInterval = setInterval(() => {
                 if (!isMusicOn || !isPlaying || !audioCtx) return;
-                
                 const now = audioCtx.currentTime;
                 
-                // 1. KICK DRUM (Every beat)
+                // Kick
                 const kickOsc = audioCtx.createOscillator();
                 const kickGain = audioCtx.createGain();
                 kickOsc.frequency.setValueAtTime(150, now);
                 kickOsc.frequency.exponentialRampToValueAtTime(0.01, now + 0.5);
-                kickGain.gain.setValueAtTime(0.3, now); // Volume
+                kickGain.gain.setValueAtTime(0.3, now);
                 kickGain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
-                kickOsc.connect(kickGain);
-                kickGain.connect(audioCtx.destination);
-                kickOsc.start(now);
-                kickOsc.stop(now + 0.5);
+                kickOsc.connect(kickGain); kickGain.connect(audioCtx.destination);
+                kickOsc.start(now); kickOsc.stop(now + 0.5);
 
-                // 2. BASSLINE (Off-beat: & 2 & 4)
-                // Simple progression: C - G - A# - F
+                // Bass
                 const rootNotes = [65.41, 49.00, 58.27, 43.65]; 
-                // Switch note every 8 beats
                 const currentNote = rootNotes[Math.floor(musicStep / 8) % rootNotes.length];
-                
-                // Play bass note slightly offset (the "pump" effect)
                 const bassOsc = audioCtx.createOscillator();
                 const bassGain = audioCtx.createGain();
                 bassOsc.type = 'sawtooth';
                 bassOsc.frequency.setValueAtTime(currentNote, now + 0.25);
-                
-                // Lowpass filter for synthwave feel
                 const bassFilter = audioCtx.createBiquadFilter();
                 bassFilter.type = 'lowpass';
                 bassFilter.frequency.setValueAtTime(300, now + 0.25);
                 bassFilter.frequency.linearRampToValueAtTime(100, now + 0.5);
-
-                bassOsc.connect(bassFilter);
-                bassFilter.connect(bassGain);
-                bassGain.connect(audioCtx.destination);
-                
+                bassOsc.connect(bassFilter); bassFilter.connect(bassGain); bassGain.connect(audioCtx.destination);
                 bassGain.gain.setValueAtTime(0, now + 0.25);
                 bassGain.gain.linearRampToValueAtTime(0.15, now + 0.3);
                 bassGain.gain.exponentialRampToValueAtTime(0.01, now + 0.7);
-                
-                bassOsc.start(now + 0.25);
-                bassOsc.stop(now + 0.75);
+                bassOsc.start(now + 0.25); bassOsc.stop(now + 0.75);
 
-                // 3. HI-HAT (Every beat)
+                // Hat
                 const hatOsc = audioCtx.createOscillator();
                 const hatGain = audioCtx.createGain();
-                hatOsc.type = 'square'; // Poor man's noise
+                hatOsc.type = 'square';
                 hatOsc.frequency.setValueAtTime(800, now);
-                // Make it sound noisy
                 hatOsc.frequency.linearRampToValueAtTime(1200, now + 0.05);
                 hatGain.gain.setValueAtTime(0.02, now);
                 hatGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-                hatOsc.connect(hatGain);
-                hatGain.connect(audioCtx.destination);
-                hatOsc.start(now);
-                hatOsc.stop(now + 0.05);
+                hatOsc.connect(hatGain); hatGain.connect(audioCtx.destination);
+                hatOsc.start(now); hatOsc.stop(now + 0.05);
 
                 musicStep++;
-
-            }, 500); // 500ms = 120 BPM
+            }, 500);
         };
 
         const toggleMusic = () => {
             isMusicOn = !isMusicOn;
             const btn = document.getElementById('music-btn');
             if(isMusicOn) {
-                btn.classList.remove('music-off');
-                btn.innerText = "🎵";
-                initAudio();
+                btn.classList.remove('music-off'); btn.innerText = "🎵"; initAudio();
             } else {
-                btn.classList.add('music-off');
-                btn.innerText = "🔇";
-                if(musicInterval) clearInterval(musicInterval);
+                btn.classList.add('music-off'); btn.innerText = "🔇"; if(musicInterval) clearInterval(musicInterval);
             }
         };
 
         const playSound = (name) => {
             if (!audioCtx) return;
             if (audioCtx.state === 'suspended') audioCtx.resume();
-
             const t = audioCtx.currentTime;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
+            osc.connect(gain); gain.connect(audioCtx.destination);
 
             if (name === 'tap') {
-                osc.frequency.setValueAtTime(600, t);
-                osc.frequency.exponentialRampToValueAtTime(100, t + 0.1);
-                gain.gain.setValueAtTime(0.1, t);
-                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+                osc.frequency.setValueAtTime(600, t); osc.frequency.exponentialRampToValueAtTime(100, t + 0.1);
+                gain.gain.setValueAtTime(0.1, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
                 osc.start(t); osc.stop(t + 0.1);
             } 
             else if (name === 'point') {
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(1200, t);
-                osc.frequency.setValueAtTime(1600, t + 0.05); 
-                gain.gain.setValueAtTime(0.1, t);
-                gain.gain.linearRampToValueAtTime(0.01, t + 0.15);
+                osc.type = 'sine'; osc.frequency.setValueAtTime(1200, t); osc.frequency.setValueAtTime(1600, t + 0.05); 
+                gain.gain.setValueAtTime(0.1, t); gain.gain.linearRampToValueAtTime(0.01, t + 0.15);
                 osc.start(t); osc.stop(t + 0.15);
             }
             else if (name === 'crash') {
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(100, t);
-                osc.frequency.exponentialRampToValueAtTime(10, t + 0.4);
-                gain.gain.setValueAtTime(0.3, t);
-                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, t); osc.frequency.exponentialRampToValueAtTime(10, t + 0.4);
+                gain.gain.setValueAtTime(0.3, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
                 osc.start(t); osc.stop(t + 0.4);
             }
             else if (name === 'shield') {
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(200, t);
-                osc.frequency.linearRampToValueAtTime(600, t + 0.3);
-                gain.gain.setValueAtTime(0.05, t);
-                gain.gain.linearRampToValueAtTime(0.01, t + 0.3);
+                osc.type = 'square'; osc.frequency.setValueAtTime(200, t); osc.frequency.linearRampToValueAtTime(600, t + 0.3);
+                gain.gain.setValueAtTime(0.05, t); gain.gain.linearRampToValueAtTime(0.01, t + 0.3);
                 osc.start(t); osc.stop(t + 0.3);
             }
             else if (name === 'flux') {
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(300, t);
-                osc.frequency.linearRampToValueAtTime(1000, t + 0.4);
-                gain.gain.setValueAtTime(0.1, t);
-                gain.gain.linearRampToValueAtTime(0, t + 0.4);
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(300, t); osc.frequency.linearRampToValueAtTime(1000, t + 0.4);
+                gain.gain.setValueAtTime(0.1, t); gain.gain.linearRampToValueAtTime(0, t + 0.4);
                 osc.start(t); osc.stop(t + 0.4);
             }
             else if (name === 'void') {
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(80, t);
-                osc.frequency.linearRampToValueAtTime(40, t + 0.8);
-                gain.gain.setValueAtTime(0.2, t);
-                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.8);
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(80, t); osc.frequency.linearRampToValueAtTime(40, t + 0.8);
+                gain.gain.setValueAtTime(0.2, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.8);
                 osc.start(t); osc.stop(t + 0.8);
             }
         };
 
-        document.addEventListener('click', initAudio);
-        document.addEventListener('touchstart', initAudio);
-        document.addEventListener('keydown', initAudio);
-        document.getElementById('music-btn').onclick = toggleMusic;
+        // Init listeners globally for input
+        const handleGlobalInput = (e) => {
+            // Ignore clicks on buttons or inputs
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.shop-item')) return;
+            
+            initAudio();
+            if(isPlaying) { 
+                player.direction *= -1; 
+                playSound('tap'); 
+            }
+        };
+
+        document.addEventListener('mousedown', handleGlobalInput);
+        document.addEventListener('keydown', (e) => { if(e.code==='Space') handleGlobalInput(e); });
+        document.addEventListener('touchstart', (e) => { 
+            if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT' && !e.target.closest('.shop-item')) { 
+                e.preventDefault(); 
+                handleGlobalInput(e);
+            } 
+        }, {passive:false});
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
+        // --- DATA & LEADERBOARD ---
         const SKINS = [
             { id: 'neon', name: 'Neon Core', color: '#0ff', price: 0 },
             { id: 'gold', name: 'Midas Touch', color: '#ffd700', price: 100 },
@@ -360,8 +372,45 @@
             { id: 'void', name: 'Dark Matter', color: '#90f', price: 1000 }
         ];
 
-        let savedData = JSON.parse(localStorage.getItem('neonOrbitData')) || { highScore: 0, chips: 0, unlockedSkins: ['neon'], equippedSkin: 'neon' };
+        let savedData = JSON.parse(localStorage.getItem('neonOrbitData')) || { 
+            highScore: 0, 
+            chips: 0, 
+            unlockedSkins: ['neon'], 
+            equippedSkin: 'neon',
+            leaderboard: [] 
+        };
+
         function saveData() { localStorage.setItem('neonOrbitData', JSON.stringify(savedData)); updateCurrencyUI(); }
+
+        function saveToLeaderboard(name) {
+            if(!name) name = "UNKNOWN";
+            savedData.leaderboard.push({ name: name, score: score, level: level });
+            // Sort by score desc
+            savedData.leaderboard.sort((a, b) => b.score - a.score);
+            // Keep top 10
+            if (savedData.leaderboard.length > 10) savedData.leaderboard.length = 10;
+            saveData();
+            showLeaderboard();
+        }
+
+        function showLeaderboard() {
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('leaderboardScreen').classList.remove('hidden');
+            
+            const list = document.getElementById('leaderboardList');
+            list.innerHTML = '';
+            
+            savedData.leaderboard.forEach((entry, index) => {
+                const row = document.createElement('div');
+                row.className = 'lb-row';
+                row.innerHTML = `
+                    <span class="lb-rank">${index + 1}</span>
+                    <span class="lb-name">${entry.name}</span>
+                    <span class="lb-score">${entry.score} <span style="color:#666; font-size:0.7em;">(L${entry.level})</span></span>
+                `;
+                list.appendChild(row);
+            });
+        }
 
         const THEMES = [
             { name: "CYBER", bg: '#050505', enemy: '#ff3333', ui: '#0ff' },
@@ -451,7 +500,7 @@
 
         function startGame() {
             initAudio(); 
-            ['startScreen', 'gameOverScreen', 'shopScreen'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            ['startScreen', 'gameOverScreen', 'shopScreen', 'leaderboardScreen'].forEach(id => document.getElementById(id).classList.add('hidden'));
             document.getElementById('mode-indicator').classList.remove('mode-active');
             score = 0; level = 1; difficulty = 1; gameTime = 0; timeScale = 1;
             enemies = []; bonuses = []; particles = [];
@@ -472,9 +521,20 @@
             playSound('crash'); addShake(1.0);
             savedData.chips += score; if(score > savedData.highScore) savedData.highScore = score;
             saveData();
+            
             document.getElementById('finalScore').innerText = score;
             document.getElementById('earnedChips').innerText = score;
+            
+            // Prepare Input Field
+            document.getElementById('playerName').value = '';
             document.getElementById('gameOverScreen').classList.remove('hidden');
+            
+            // Focus input on desktop
+            setTimeout(() => {
+               const input = document.getElementById('playerName');
+               input.focus();
+            }, 100);
+            
             isGameOverProcessing = false;
         }
 
@@ -486,6 +546,7 @@
         function openShop() {
             document.getElementById('startScreen').classList.add('hidden');
             document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('leaderboardScreen').classList.add('hidden');
             document.getElementById('shopScreen').classList.remove('hidden');
             renderShop();
         }
@@ -507,22 +568,6 @@
                 grid.appendChild(el);
             });
         }
-
-        function input() { 
-            if(isPlaying) { 
-                player.direction *= -1; 
-                playSound('tap'); 
-            } 
-        }
-        document.addEventListener('mousedown', e=>{ if(e.target.tagName!=='BUTTON' && !e.target.closest('.shop-item')) input(); });
-        document.addEventListener('keydown', e=>{ if(e.code==='Space') input(); });
-        document.addEventListener('touchstart', e=>{ if(e.target.tagName!=='BUTTON' && !e.target.closest('.shop-item')) { e.preventDefault(); input(); } }, {passive:false});
-
-        document.getElementById('startBtn').onclick = startGame;
-        document.getElementById('restartBtn').onclick = startGame;
-        document.getElementById('shop-btn').onclick = openShop;
-        document.getElementById('goShopBtn').onclick = openShop;
-        document.getElementById('closeShopBtn').onclick = () => { document.getElementById('shopScreen').classList.add('hidden'); document.getElementById('startScreen').classList.remove('hidden'); };
 
         function loop(timestamp) {
             if(!isPlaying) return;
@@ -710,6 +755,39 @@
             requestAnimationFrame(loop);
         }
         updateCurrencyUI();
+
+        // --- SAFE EVENT BINDING ---
+        window.addEventListener('load', () => {
+            const bind = (id, fn) => {
+                const el = document.getElementById(id);
+                if(el) el.onclick = fn;
+            };
+
+            bind('startBtn', startGame);
+            // We map restartBtn to startGame because game over screen flows into leaderboard eventually
+            // but user might want to just retry immediately? Wait, restartBtn is on Game Over screen.
+            // Yes, user enters name then submits. Or just retries.
+            bind('restartBtn', startGame); 
+            bind('restartBtnLB', startGame);
+            
+            bind('submitScoreBtn', () => {
+                const nameInput = document.getElementById('playerName');
+                const name = nameInput ? (nameInput.value.trim().toUpperCase() || "PILOT_" + Math.floor(Math.random()*1000)) : "UNKNOWN";
+                saveToLeaderboard(name);
+            });
+
+            bind('shop-btn', openShop);
+            bind('goShopBtn', openShop);
+            bind('goShopBtnLB', openShop);
+            
+            bind('closeShopBtn', () => {
+                document.getElementById('shopScreen').classList.add('hidden');
+                document.getElementById('startScreen').classList.remove('hidden');
+            });
+
+            bind('music-btn', toggleMusic);
+        });
+
     </script>
 </body>
 </html>
