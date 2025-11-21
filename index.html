@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Orbit: Global</title>
+    <title>Neon Orbit: Universal</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
 
@@ -170,7 +170,7 @@
     <div id="startScreen" class="screen-overlay">
         <div class="card">
             <h1>Neon Orbit</h1>
-            <p style="color:#0ff; font-weight:bold;">GLOBAL SERVER</p>
+            <p style="color:#0ff; font-weight:bold;" id="connectionStatus">SYSTEM ONLINE</p>
             <div style="text-align:left; font-size:0.8rem; background:rgba(255,255,255,0.1); padding:10px; border-radius:10px; margin:10px 0;">
                 <span style="color:#ff3333">■</span> Avoid Red<br>
                 <span style="color:#39ff14">●</span> Collect Green (+5)<br>
@@ -194,7 +194,7 @@
                 <input type="text" id="playerName" placeholder="PILOT_ID" maxlength="10" autocomplete="off">
             </div>
             
-            <button class="btn" id="submitScoreBtn" style="border-color:#39ff14; color:#39ff14;">SUBMIT TO GLOBAL</button>
+            <button class="btn" id="submitScoreBtn" style="border-color:#39ff14; color:#39ff14;">SUBMIT SCORE</button>
             <p id="submitStatus" style="font-size:0.7rem; color:#888; height:15px;"></p>
         </div>
     </div>
@@ -202,14 +202,14 @@
     <!-- LEADERBOARD SCREEN -->
     <div id="leaderboardScreen" class="screen-overlay hidden">
         <div class="card">
-            <h1 style="color:#ffd700;">GLOBAL TOP 10</h1>
+            <h1 style="color:#ffd700;" id="lbTitle">LEADERBOARD</h1>
             <div class="lb-row lb-header">
                 <span class="lb-rank">#</span>
                 <span class="lb-name">NAME</span>
                 <span class="lb-score">SCORE</span>
             </div>
             <div class="leaderboard-container" id="leaderboardList">
-                <div class="lb-loading">CONNECTING TO SERVER...</div>
+                <div class="lb-loading">LOADING DATA...</div>
             </div>
             <div style="display:flex; gap:10px; margin-top:15px;">
                 <button class="btn" id="restartBtnLB">RETRY</button>
@@ -229,37 +229,60 @@
     </div>
 
     <script type="module">
-        // --- FIREBASE SETUP ---
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
+        // --- SAFE HYBRID BACKEND ---
+        // This approach allows the game to work BOTH with Firebase (if configured) AND LocalStorage (if offline/Vercel default)
+        
+        let db = null;
+        let auth = null;
         let currentUser = null;
+        let appId = null;
+        let isOnlineMode = false;
 
-        // Initialize Auth correctly with Custom Token fallback
-        const initFirebaseAuth = async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    const userCredential = await signInWithCustomToken(auth, __initial_auth_token);
-                    currentUser = userCredential.user;
-                    console.log("Authenticated via Custom Token");
-                } else {
-                    const userCredential = await signInAnonymously(auth);
-                    currentUser = userCredential.user;
-                    console.log("Authenticated Anonymously");
+        // Try to init Firebase safely
+        const initBackend = async () => {
+            if (typeof __firebase_config !== 'undefined' && typeof __app_id !== 'undefined') {
+                try {
+                    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+                    const { getAuth, signInAnonymously, signInWithCustomToken } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
+                    const { getFirestore, collection, addDoc, getDocs } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+
+                    const firebaseConfig = JSON.parse(__firebase_config);
+                    const app = initializeApp(firebaseConfig);
+                    auth = getAuth(app);
+                    db = getFirestore(app);
+                    appId = __app_id;
+
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    
+                    // Only set online if auth worked
+                    if(auth.currentUser) {
+                        currentUser = auth.currentUser;
+                        isOnlineMode = true;
+                        document.getElementById('connectionStatus').innerText = "GLOBAL NETWORK ONLINE";
+                        document.getElementById('connectionStatus').style.color = "#39ff14";
+                        console.log("Connected to Firebase Global");
+                    }
+                } catch (e) {
+                    console.log("Firebase init failed, falling back to offline mode:", e);
+                    fallbackToOffline();
                 }
-            } catch (error) {
-                console.error("Auth Error:", error);
+            } else {
+                console.log("No Firebase config found, running offline mode.");
+                fallbackToOffline();
             }
         };
-        
-        initFirebaseAuth();
+
+        function fallbackToOffline() {
+            isOnlineMode = false;
+            document.getElementById('connectionStatus').innerText = "OFFLINE MODE";
+            document.getElementById('connectionStatus').style.color = "#ffd700";
+        }
+
+        initBackend();
 
         // --- GAME LOGIC ---
         let audioCtx = null;
@@ -401,91 +424,98 @@
             { id: 'void', name: 'Dark Matter', color: '#90f', price: 1000 }
         ];
 
-        // Local data for chips/skins (these are private)
+        // Local data logic
         let savedData = JSON.parse(localStorage.getItem('neonOrbitData')) || {};
         if (typeof savedData.highScore === 'undefined') savedData.highScore = 0;
         if (typeof savedData.chips === 'undefined') savedData.chips = 0;
         if (!Array.isArray(savedData.unlockedSkins)) savedData.unlockedSkins = ['neon'];
         if (!savedData.equippedSkin) savedData.equippedSkin = 'neon';
+        // Ensure local leaderboard array exists for offline mode
+        if (!Array.isArray(savedData.localLeaderboard)) savedData.localLeaderboard = [];
 
         function saveData() { localStorage.setItem('neonOrbitData', JSON.stringify(savedData)); updateCurrencyUI(); }
 
-        // --- GLOBAL LEADERBOARD LOGIC ---
-        async function submitToGlobalLeaderboard(name) {
-            const submitBtn = document.getElementById('submitScoreBtn');
-            const status = document.getElementById('submitStatus');
-            
-            if (!currentUser) {
-                // Wait a moment for auth
-                status.innerText = "Connecting...";
-                setTimeout(() => submitToGlobalLeaderboard(name), 500);
-                return;
-            }
-            
-            submitBtn.disabled = true;
-            submitBtn.innerText = "TRANSMITTING...";
-            
-            try {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard'), {
-                    name: name,
-                    score: score,
-                    level: level,
-                    timestamp: Date.now()
-                });
-                fetchGlobalLeaderboard();
-            } catch (e) {
-                console.error("Submit Error:", e);
-                status.innerText = "Permission Error or Network Fail";
-                submitBtn.innerText = "RETRY";
-                submitBtn.disabled = false;
+        // --- HYBRID LEADERBOARD LOGIC ---
+        async function submitScore(name) {
+            const btn = document.getElementById('submitScoreBtn');
+            btn.disabled = true;
+            btn.innerText = "SAVING...";
+
+            const entry = { name: name, score: score, level: level, timestamp: Date.now() };
+
+            if (isOnlineMode && db) {
+                // GLOBAL SUBMIT
+                try {
+                    const { collection, addDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard'), entry);
+                    fetchLeaderboard();
+                } catch (e) {
+                    console.error("Global Submit Failed", e);
+                    // Fallback to local if global fails
+                    saveLocalScore(entry);
+                    fetchLeaderboard();
+                }
+            } else {
+                // OFFLINE SUBMIT
+                saveLocalScore(entry);
+                fetchLeaderboard();
             }
         }
 
-        async function fetchGlobalLeaderboard() {
+        function saveLocalScore(entry) {
+            savedData.localLeaderboard.push(entry);
+            savedData.localLeaderboard.sort((a, b) => b.score - a.score);
+            if (savedData.localLeaderboard.length > 10) savedData.localLeaderboard.length = 10;
+            saveData();
+        }
+
+        async function fetchLeaderboard() {
             document.getElementById('gameOverScreen').classList.add('hidden');
             document.getElementById('leaderboardScreen').classList.remove('hidden');
-            
             const list = document.getElementById('leaderboardList');
-            list.innerHTML = '<div class="lb-loading">FETCHING GLOBAL DATA...</div>';
+            const title = document.getElementById('lbTitle');
             
-            try {
-                if (!currentUser) {
-                    // Wait for auth before reading
-                    setTimeout(fetchGlobalLeaderboard, 500);
-                    return;
-                }
+            list.innerHTML = '<div class="lb-loading">LOADING...</div>';
 
-                // Fetch ALL (simple query for this demo, limit in production)
-                const snapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard'));
-                let scores = [];
-                snapshot.forEach(doc => {
-                    const d = doc.data();
-                    if(d.name && d.score !== undefined) scores.push(d);
-                });
-                
-                // Sort in JS memory per instructions
-                scores.sort((a, b) => b.score - a.score);
-                
-                const top10 = scores.slice(0, 10);
-                
-                list.innerHTML = '';
-                if (top10.length === 0) {
-                    list.innerHTML = '<div style="color:#666; text-align:center; padding:20px;">NO RECORDS FOUND</div>';
-                } else {
-                    top10.forEach((entry, index) => {
-                        const row = document.createElement('div');
-                        row.className = 'lb-row';
-                        row.innerHTML = `
-                            <span class="lb-rank">${index + 1}</span>
-                            <span class="lb-name">${entry.name.substring(0,10)}</span>
-                            <span class="lb-score">${entry.score}</span>
-                        `;
-                        list.appendChild(row);
+            let scores = [];
+
+            if (isOnlineMode && db) {
+                title.innerText = "GLOBAL TOP 10";
+                try {
+                    const { collection, getDocs } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+                    const snapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard'));
+                    snapshot.forEach(doc => {
+                        const d = doc.data();
+                        if(d.name && d.score !== undefined) scores.push(d);
                     });
+                } catch (e) {
+                    console.error("Fetch Error, showing local", e);
+                    scores = savedData.localLeaderboard || [];
+                    title.innerText = "LOCAL TOP 10";
                 }
-            } catch (e) {
-                console.error("Fetch Error:", e);
-                list.innerHTML = '<div style="color:red; text-align:center;">CONNECTION ERROR</div>';
+            } else {
+                title.innerText = "LOCAL TOP 10";
+                scores = savedData.localLeaderboard || [];
+            }
+
+            // Sort & Render
+            scores.sort((a, b) => b.score - a.score);
+            const top10 = scores.slice(0, 10);
+
+            list.innerHTML = '';
+            if (top10.length === 0) {
+                list.innerHTML = '<div style="color:#666; text-align:center; padding:20px;">NO RECORDS YET</div>';
+            } else {
+                top10.forEach((entry, index) => {
+                    const row = document.createElement('div');
+                    row.className = 'lb-row';
+                    row.innerHTML = `
+                        <span class="lb-rank">${index + 1}</span>
+                        <span class="lb-name">${entry.name.substring(0,12)}</span>
+                        <span class="lb-score">${entry.score}</span>
+                    `;
+                    list.appendChild(row);
+                });
             }
         }
 
@@ -607,7 +637,7 @@
             
             const btn = document.getElementById('submitScoreBtn');
             btn.disabled = false;
-            btn.innerText = "SUBMIT TO GLOBAL";
+            btn.innerText = "SUBMIT SCORE";
             document.getElementById('submitStatus').innerText = "";
 
             document.getElementById('gameOverScreen').classList.remove('hidden');
@@ -847,7 +877,7 @@
             bind('submitScoreBtn', () => {
                 const nameInput = document.getElementById('playerName');
                 const name = nameInput ? (nameInput.value.trim().toUpperCase() || "PILOT_" + Math.floor(Math.random()*1000)) : "UNKNOWN";
-                submitToGlobalLeaderboard(name);
+                submitScore(name);
             });
 
             bind('shop-btn', openShop);
