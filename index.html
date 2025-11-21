@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Orbit: Production</title>
+    <title>Neon Orbit: Global</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
 
@@ -84,8 +84,8 @@
             transition: all 0.1s; margin-top: 10px; outline: none; width: 80%;
         }
         .btn:active { background: #fff; color: #000; transform: scale(0.95); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* Inputs */
         input[type="text"] {
             background: rgba(255,255,255,0.1); border: 1px solid #fff; color: #fff;
             padding: 10px; font-family: 'Orbitron'; font-size: 1.2rem; text-align: center;
@@ -106,6 +106,9 @@
         .lb-name { width: 50%; color: #fff; text-align: left; font-weight: bold; }
         .lb-score { width: 40%; color: #0ff; text-align: right; }
         .lb-header { color: #aaa; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 5px; }
+        .lb-loading { color: #0ff; font-style: italic; margin-top: 20px; animation: blink 1s infinite; }
+
+        @keyframes blink { 50% { opacity: 0.5; } }
 
         #shopScreen { z-index: 60; }
         .shop-grid {
@@ -167,7 +170,7 @@
     <div id="startScreen" class="screen-overlay">
         <div class="card">
             <h1>Neon Orbit</h1>
-            <p style="color:#0ff; font-weight:bold;">SYSTEM ONLINE</p>
+            <p style="color:#0ff; font-weight:bold;">GLOBAL SERVER</p>
             <div style="text-align:left; font-size:0.8rem; background:rgba(255,255,255,0.1); padding:10px; border-radius:10px; margin:10px 0;">
                 <span style="color:#ff3333">■</span> Avoid Red<br>
                 <span style="color:#39ff14">●</span> Collect Green (+5)<br>
@@ -179,7 +182,7 @@
         </div>
     </div>
 
-    <!-- GAME OVER SCREEN (Input Name) -->
+    <!-- GAME OVER SCREEN -->
     <div id="gameOverScreen" class="screen-overlay hidden">
         <div class="card">
             <h1 class="red-text">WRECKED</h1>
@@ -191,21 +194,22 @@
                 <input type="text" id="playerName" placeholder="PILOT_ID" maxlength="10" autocomplete="off">
             </div>
             
-            <button class="btn" id="submitScoreBtn" style="border-color:#39ff14; color:#39ff14;">SUBMIT SCORE</button>
+            <button class="btn" id="submitScoreBtn" style="border-color:#39ff14; color:#39ff14;">SUBMIT TO GLOBAL</button>
+            <p id="submitStatus" style="font-size:0.7rem; color:#888; height:15px;"></p>
         </div>
     </div>
 
     <!-- LEADERBOARD SCREEN -->
     <div id="leaderboardScreen" class="screen-overlay hidden">
         <div class="card">
-            <h1 style="color:#ffd700;">TOP 10 PILOTS</h1>
+            <h1 style="color:#ffd700;">GLOBAL TOP 10</h1>
             <div class="lb-row lb-header">
                 <span class="lb-rank">#</span>
                 <span class="lb-name">NAME</span>
-                <span class="lb-score">SCORE (LVL)</span>
+                <span class="lb-score">SCORE</span>
             </div>
             <div class="leaderboard-container" id="leaderboardList">
-                <!-- Scores injected here -->
+                <div class="lb-loading">CONNECTING TO SERVER...</div>
             </div>
             <div style="display:flex; gap:10px; margin-top:15px;">
                 <button class="btn" id="restartBtnLB">RETRY</button>
@@ -224,8 +228,40 @@
         </div>
     </div>
 
-    <script>
-        // --- AUDIO ENGINE ---
+    <script type="module">
+        // --- FIREBASE SETUP ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        let currentUser = null;
+
+        // Initialize Auth correctly with Custom Token fallback
+        const initFirebaseAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    const userCredential = await signInWithCustomToken(auth, __initial_auth_token);
+                    currentUser = userCredential.user;
+                    console.log("Authenticated via Custom Token");
+                } else {
+                    const userCredential = await signInAnonymously(auth);
+                    currentUser = userCredential.user;
+                    console.log("Authenticated Anonymously");
+                }
+            } catch (error) {
+                console.error("Auth Error:", error);
+            }
+        };
+        
+        initFirebaseAuth();
+
+        // --- GAME LOGIC ---
         let audioCtx = null;
         let isMusicOn = true;
         let musicInterval = null;
@@ -247,7 +283,6 @@
                 if (!isMusicOn || !isPlaying || !audioCtx) return;
                 const now = audioCtx.currentTime;
                 
-                // Kick
                 const kickOsc = audioCtx.createOscillator();
                 const kickGain = audioCtx.createGain();
                 kickOsc.frequency.setValueAtTime(150, now);
@@ -257,7 +292,6 @@
                 kickOsc.connect(kickGain); kickGain.connect(audioCtx.destination);
                 kickOsc.start(now); kickOsc.stop(now + 0.5);
 
-                // Bass
                 const rootNotes = [65.41, 49.00, 58.27, 43.65]; 
                 const currentNote = rootNotes[Math.floor(musicStep / 8) % rootNotes.length];
                 const bassOsc = audioCtx.createOscillator();
@@ -274,7 +308,6 @@
                 bassGain.gain.exponentialRampToValueAtTime(0.01, now + 0.7);
                 bassOsc.start(now + 0.25); bassOsc.stop(now + 0.75);
 
-                // Hat
                 const hatOsc = audioCtx.createOscillator();
                 const hatGain = audioCtx.createGain();
                 hatOsc.type = 'square';
@@ -339,11 +372,8 @@
             }
         };
 
-        // Init listeners globally for input
         const handleGlobalInput = (e) => {
-            // Ignore clicks on buttons or inputs
             if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.shop-item')) return;
-            
             initAudio();
             if(isPlaying) { 
                 player.direction *= -1; 
@@ -363,7 +393,6 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // --- DATA & LEADERBOARD FIX ---
         const SKINS = [
             { id: 'neon', name: 'Neon Core', color: '#0ff', price: 0 },
             { id: 'gold', name: 'Midas Touch', color: '#ffd700', price: 100 },
@@ -372,52 +401,91 @@
             { id: 'void', name: 'Dark Matter', color: '#90f', price: 1000 }
         ];
 
-        // SAFE DATA LOADING
+        // Local data for chips/skins (these are private)
         let savedData = JSON.parse(localStorage.getItem('neonOrbitData')) || {};
-        
-        // Ensure structure exists (Migration fix)
         if (typeof savedData.highScore === 'undefined') savedData.highScore = 0;
         if (typeof savedData.chips === 'undefined') savedData.chips = 0;
         if (!Array.isArray(savedData.unlockedSkins)) savedData.unlockedSkins = ['neon'];
         if (!savedData.equippedSkin) savedData.equippedSkin = 'neon';
-        if (!Array.isArray(savedData.leaderboard)) savedData.leaderboard = [];
 
         function saveData() { localStorage.setItem('neonOrbitData', JSON.stringify(savedData)); updateCurrencyUI(); }
 
-        function saveToLeaderboard(name) {
-            if(!name) name = "UNKNOWN";
-            // Extra safety check
-            if (!savedData.leaderboard) savedData.leaderboard = [];
+        // --- GLOBAL LEADERBOARD LOGIC ---
+        async function submitToGlobalLeaderboard(name) {
+            const submitBtn = document.getElementById('submitScoreBtn');
+            const status = document.getElementById('submitStatus');
             
-            savedData.leaderboard.push({ name: name, score: score, level: level });
-            // Sort by score desc
-            savedData.leaderboard.sort((a, b) => b.score - a.score);
-            // Keep top 10
-            if (savedData.leaderboard.length > 10) savedData.leaderboard.length = 10;
-            saveData();
-            showLeaderboard();
+            if (!currentUser) {
+                // Wait a moment for auth
+                status.innerText = "Connecting...";
+                setTimeout(() => submitToGlobalLeaderboard(name), 500);
+                return;
+            }
+            
+            submitBtn.disabled = true;
+            submitBtn.innerText = "TRANSMITTING...";
+            
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard'), {
+                    name: name,
+                    score: score,
+                    level: level,
+                    timestamp: Date.now()
+                });
+                fetchGlobalLeaderboard();
+            } catch (e) {
+                console.error("Submit Error:", e);
+                status.innerText = "Permission Error or Network Fail";
+                submitBtn.innerText = "RETRY";
+                submitBtn.disabled = false;
+            }
         }
 
-        function showLeaderboard() {
-            const lbScreen = document.getElementById('leaderboardScreen');
-            const gameOverScreen = document.getElementById('gameOverScreen');
-            
-            if(gameOverScreen) gameOverScreen.classList.add('hidden');
-            if(lbScreen) lbScreen.classList.remove('hidden');
+        async function fetchGlobalLeaderboard() {
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('leaderboardScreen').classList.remove('hidden');
             
             const list = document.getElementById('leaderboardList');
-            if(list) {
-                list.innerHTML = '';
-                (savedData.leaderboard || []).forEach((entry, index) => {
-                    const row = document.createElement('div');
-                    row.className = 'lb-row';
-                    row.innerHTML = `
-                        <span class="lb-rank">${index + 1}</span>
-                        <span class="lb-name">${entry.name}</span>
-                        <span class="lb-score">${entry.score} <span style="color:#666; font-size:0.7em;">(L${entry.level})</span></span>
-                    `;
-                    list.appendChild(row);
+            list.innerHTML = '<div class="lb-loading">FETCHING GLOBAL DATA...</div>';
+            
+            try {
+                if (!currentUser) {
+                    // Wait for auth before reading
+                    setTimeout(fetchGlobalLeaderboard, 500);
+                    return;
+                }
+
+                // Fetch ALL (simple query for this demo, limit in production)
+                const snapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard'));
+                let scores = [];
+                snapshot.forEach(doc => {
+                    const d = doc.data();
+                    if(d.name && d.score !== undefined) scores.push(d);
                 });
+                
+                // Sort in JS memory per instructions
+                scores.sort((a, b) => b.score - a.score);
+                
+                const top10 = scores.slice(0, 10);
+                
+                list.innerHTML = '';
+                if (top10.length === 0) {
+                    list.innerHTML = '<div style="color:#666; text-align:center; padding:20px;">NO RECORDS FOUND</div>';
+                } else {
+                    top10.forEach((entry, index) => {
+                        const row = document.createElement('div');
+                        row.className = 'lb-row';
+                        row.innerHTML = `
+                            <span class="lb-rank">${index + 1}</span>
+                            <span class="lb-name">${entry.name.substring(0,10)}</span>
+                            <span class="lb-score">${entry.score}</span>
+                        `;
+                        list.appendChild(row);
+                    });
+                }
+            } catch (e) {
+                console.error("Fetch Error:", e);
+                list.innerHTML = '<div style="color:red; text-align:center;">CONNECTION ERROR</div>';
             }
         }
 
@@ -534,13 +602,15 @@
             document.getElementById('finalScore').innerText = score;
             document.getElementById('earnedChips').innerText = score;
             
-            // Prepare Input Field
             const input = document.getElementById('playerName');
             if(input) input.value = '';
             
+            const btn = document.getElementById('submitScoreBtn');
+            btn.disabled = false;
+            btn.innerText = "SUBMIT TO GLOBAL";
+            document.getElementById('submitStatus').innerText = "";
+
             document.getElementById('gameOverScreen').classList.remove('hidden');
-            
-            // Focus input on desktop
             setTimeout(() => { if(input) input.focus(); }, 100);
             
             isGameOverProcessing = false;
@@ -764,7 +834,6 @@
         }
         updateCurrencyUI();
 
-        // --- SAFE EVENT BINDING ---
         window.addEventListener('load', () => {
             const bind = (id, fn) => {
                 const el = document.getElementById(id);
@@ -778,7 +847,7 @@
             bind('submitScoreBtn', () => {
                 const nameInput = document.getElementById('playerName');
                 const name = nameInput ? (nameInput.value.trim().toUpperCase() || "PILOT_" + Math.floor(Math.random()*1000)) : "UNKNOWN";
-                saveToLeaderboard(name);
+                submitToGlobalLeaderboard(name);
             });
 
             bind('shop-btn', openShop);
